@@ -1,5 +1,6 @@
 import javax.sound.midi.*;
 import javax.swing.*;
+import javax.swing.event.*;
 import java.awt.*;
 import java.io.*;
 import java.net.Socket;
@@ -10,17 +11,24 @@ import static javax.sound.midi.ShortMessage.*;
 
 public class BeatBox {
     private JList<String> incomingList;
+    // This is a list to be displayed on the UI. This value needs to hydrate using an actual 
+    // data structure. Swing uses Vector to hydrate this UI element. so in line 259 we do
+    // incomingList.setListData(listVector);
     private JTextArea userMessage;
     private ArrayList<JCheckBox> checkboxList;
 
     private Vector<String> listVector = new Vector<>();
+    // This is the actual list of String to be displayed on th JList list. This is just a java 
+    // datastruture to store the text to be dispalyed. Why vector and not ArrayList ? - Swing is old
     private HashMap<String, boolean[]> otherSeqsMap = new HashMap<>();
+    // Maps Username to thier checkboxSate, basically username to their music. But its not
+    // only the username, we also append a num to it to make sure one user can have multiple tracks.
 
     private String userName;
     private int nextNum;
 
     private ObjectOutputStream out;
-    private ObjectInutStream in;
+    private ObjectInputStream in;
 
     private Sequencer sequencer;
     private Sequence sequence;
@@ -47,7 +55,7 @@ public class BeatBox {
         try {
             Socket socket = new Socket("127.0.0.1", 4242);
             out = new ObjectOutputStream(socket.getOutputStream());
-            in = new ObjectInutStream(socket.getInputStream());
+            in = new ObjectInputStream(socket.getInputStream());
             // We're using sockets instead of channels because they work better
             // with Object Input/Output streams
             ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -96,7 +104,7 @@ public class BeatBox {
         JButton sendIt = new JButton("Send It");
         sendIt.addActionListener(e -> sendMessageAndTracks()); 
         // TODO - implement this in BeatBoxNetworking class
-        buttonBox.add(serailizeIt);
+        buttonBox.add(sendIt);
 
         // Create a text Area for user to type their message
         userMessage = new JTextArea();
@@ -228,7 +236,7 @@ public class BeatBox {
         // two objects  ( the String message and beat pattern) and write those 2  objects 
         // to the socket output stream (the server)
         try {
-            out.writeObect(userName + nextNum++ + ": " + userMessage.getText());
+            out.writeObject(userName + nextNum++ + ": " + userMessage.getText());
             out.writeObject(checkboxState); 
             // If we ahd used PrintWriter, here we'd have written println(checkboxState)
         } catch (IOException e) {
@@ -315,52 +323,5 @@ public class BeatBox {
             e.printStackTrace();
         }
         return event;
-    }
-
-    private void saveMusic() {
-        boolean[] checkboxState = new boolean[NUM_INSTRUMENTS*NUM_BEATS];
-
-        for (int i = 0; i < checkboxList.size() ; i++) {
-            JCheckBox check = checkboxList.get(i);//check is an checkbox object. It has method getSelected()
-            checkboxState[i] = check.isSelected();
-        }
-
-        JFileChooser fileSave = new JFileChooser();
-        fileSave.showSaveDialog(frame);
-        BeatBoxIO io = new BeatBoxIO();
-
-        try {
-            io.saveToFile(fileSave.getSelectedFile(), checkboxState);
-        } catch (IOException e) {
-            System.out.println("Couldn't save your music: "+ e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void openMusic() {
-        JFileChooser fileOpen = new JFileChooser();
-        fileOpen.showOpenDialog(frame);
-        BeatBoxIO io = new BeatBoxIO();
-
-        boolean[] checkboxState = null;
-        try {
-            checkboxState = io.loadFromFile(fileOpen.getSelectedFile());
-
-            if (checkboxState.length != checkboxList.size()) {
-                throw new IOException("Saved file doesn't match this BeatBox version.");
-            }
-
-            for (int i=0; i < 320; i++) {
-                JCheckBox check = checkboxList.get(i); // Get the checkbox object
-                check.setSelected(checkboxState[i]); // Set the value of the "selected" attribute using setter.
-            }
-
-            sequencer.stop(); // Stop whatever's currently palying and rebuild the sequence 
-            buildTrackAndStart(); // using the new state of checkboxes in ArrayList
-
-        } catch (IOException e) {
-            System.out.println("Couldn't read the music file: " + e.getMessage());
-            e.printStackTrace();
-        }
     }
 }

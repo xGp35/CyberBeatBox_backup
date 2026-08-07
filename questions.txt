@@ -25,5 +25,11 @@ is checkboxlist set to the music track anytime? like it seems like its always a 
 
 what is next num and what is it doing in line 227
 
-
 what's the function of incomingList and whats the function of listVector
+
+
+Music Server Questions
+why use final for arraylist in line 7
+
+
+difference between threadpool.submit and threadpool.execute
