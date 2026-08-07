@@ -1,1 +1,29 @@
 what is jlist?
+
+why sockets work better with object input/output streams?
+if native sockets work better then what were socketChannels created for?
+
+why not use try with resources while creating new socket connection?
+we were using TWR when using socketChannels
+
+what is remote reader?
+
+Line 95 - One button to send both music and text message simultaneously?
+
+What does this mean -> incomingList.setListData(listVector); line no. 114
+
+what does line number 195 do?
+
+We added the control change in nested for loop when one outer cycle ends, ie when one
+instrument ends, but here at beat 1, all instruments play simultaneously right? not instrument
+by instrument, so how does that get managed?
+
+
+is checkboxlist set to the music track anytime? like it seems like its always a 320 length list of 
+"false" values.
+
+
+what is next num and what is it doing in line 227
+
+
+what's the function of incomingList and whats the function of listVector
