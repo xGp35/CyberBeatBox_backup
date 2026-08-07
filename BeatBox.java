@@ -10,7 +10,18 @@ import static javax.sound.midi.ShortMessage.*;
 
 public class BeatBox {
     private JList<String> incomingList;
+    private JTextArea userMessage;
     private ArrayList<JCheckBox> checkboxList;
+
+    private Vector<String> listVector = new Vector<>();
+    private HashMap<String, boolean[]> otherSeqsMap = new HashMap<>();
+
+    private String userName;
+    private int nextNum;
+
+    private ObjectOutputStream out;
+    private ObjectInutStream in;
+
     private Sequencer sequencer;
     private Sequence sequence;
     private Track track;
@@ -26,7 +37,30 @@ public class BeatBox {
     int[] instruments = {35, 42, 46, 38, 49, 39, 50, 60, 70, 72, 64, 56, 58, 47, 67, 63};
 
     public static void main(String[] args) {
-        new BeatBox().buildGUI();
+        new BeatBox().startUp(args[0]);
+    }
+
+    public void startUp(String name) {
+        userName = name;
+
+        // open connection to server
+        try {
+            Socket socket = new Socket("127.0.0.1", 4242);
+            out = new ObjectOutputStream(socket.getOutputStream());
+            in = new ObjectInutStream(socket.getInputStream());
+            // We're using sockets instead of channels because they work better
+            // with Object Input/Output streams
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            // because i need jsut one extra thread apart from main.
+            executor.submit(new RemoteReader());
+        } catch (Exception ex) {
+            System.out.println("Couldn't connect - you'll have to play alone");
+            // Executor code could have been kept outside as exception is thrown by I/O operations
+            // But if connection fails, there's no need to make a thread of readers to read
+        }
+
+        setUpMidi();
+        buildGUI();
     }
 
     public void buildGUI() {
@@ -58,13 +92,27 @@ public class BeatBox {
         downTempo.addActionListener(e -> changeTempo(0.97f));
         buttonBox.add(downTempo);
 
-        JButton serailizeIt = new JButton("Serailize It");
-        serailizeIt.addActionListener(e -> saveMusic());
+        // Send message and current beat sequence to the music server
+        JButton sendIt = new JButton("Send It");
+        sendIt.addActionListener(e -> sendMessageAndTracks()); 
+        // TODO - implement this in BeatBoxNetworking class
         buttonBox.add(serailizeIt);
 
-        JButton restore = new JButton("Restore");
-        restore.addActionListener(e -> openMusic());
-        buttonBox.add(restore);
+        // Create a text Area for user to type their message
+        userMessage = new JTextArea();
+        userMessage.setLineWrap(true);
+        userMessage.setWrapStyleWord(true);
+        JScrollPane messageScroller = new JScrollPane(userMessage);
+        buttonBox.add(messageScroller);
+
+
+        incomingList = new JList<>();
+        incomingList.addListSelectionListener(new MyListSelectionListener()); 
+        // This is a event, It could have been lambda but as its ery big so implemeted as inner class
+        incomingList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane theList = new JScrollPane(incomingList);
+        buttonBox.add(theList);
+        incomingList.setListData(listVector);
 
         // Left side element, i.e, list of all instrument names
         // Box nameBox = new Box(BoxLayout.Y_AXIS);
@@ -101,14 +149,13 @@ public class BeatBox {
             mainPanel.add(c);
         }
 
-        setUpMidi();
-
         frame.setBounds(50, 50, 300, 300);
         frame.pack();
         frame.setVisible(true);
     }
 
     private void setUpMidi() {
+        // This is like setting up a DVD player, i just need to insert disc and play
         try {
             sequencer = MidiSystem.getSequencer();
             sequencer.open();
@@ -121,7 +168,7 @@ public class BeatBox {
     }
 
     private void buildTrackAndStart() {
-        int[] trackList;
+        ArrayList<Integer> trackList;
         // We're making a 20 element array to hold the values for one instrument, 
         // across all 20 beats. If the instrument is supposed to play on that beat, the value 
         // at that element will be the key. If that element is not supposed to play, put a zero
@@ -131,7 +178,7 @@ public class BeatBox {
 
         // There are 16 instruments, so do this for each of 16 rows(i.e, Bass, Congo)
         for (int i = 0; i < NUM_INSTRUMENTS; i++) { 
-            trackList = new int[20]; 
+            trackList = new ArrayList<>(); 
 
             int key = instruments[i]; 
             // set the "key" that represents the instrument. Check instance variable instruments.
@@ -139,9 +186,9 @@ public class BeatBox {
             for (int j = 0; j < NUM_BEATS; j++) { // do this for each of the beats for this row
                 JCheckBox jc = checkboxList.get(j + NUM_BEATS *i);
                 if (jc.isSelected()) {  // Is checkBox selected, if yes then put the
-                    trackList[j] = key; // key value in this slot in the array. This represents the beat
+                    trackList.add(key); // key value in this slot in the array. This represents the beat
                 } else {                // Otherwise instrument is not supposed to play at this moment.
-                    trackList[j] = 0;   // so set it to zero.
+                    trackList.add(null);// so set it to null.
                 }
             }
 
@@ -168,17 +215,92 @@ public class BeatBox {
         float tempoFactor = sequencer.getTempoFactor();
         sequencer.setTempoFactor(tempoFactor * tempoMultiplier);
     }
+
+    private void sendMessageAndTracks() {
+        // This first part is similar to saveMuic(), but here we'll send checkboxState after making it
+        boolean[] checkboxState = new boolean[NUM_BEATS*NUM_INSTRUMENTS];
+
+        for (int i = 0; i < checkboxList.size() ; i++) {
+            JCheckBox check = checkboxList.get(i);//check is an checkbox object. It has method getSelected()
+            checkboxState[i] = check.isSelected();
+        }
+        // This is like SimpleChatClient, except instead of sending a string Message, we serailize
+        // two objects  ( the String message and beat pattern) and write those 2  objects 
+        // to the socket output stream (the server)
+        try {
+            out.writeObect(userName + nextNum++ + ": " + userMessage.getText());
+            out.writeObject(checkboxState); 
+            // If we ahd used PrintWriter, here we'd have written println(checkboxState)
+        } catch (IOException e) {
+            System.out.println("Terribly sorry. Could not send it to the server.");
+            e.printStackTrace();
+        }
+        userMessage.setText(""); // Set the text area to be ""
+    }
+    
+    public class RemoteReader implements Runnable {
+        public void run() {
+            try {
+                Object obj;
+                while ((obj = in.readObject()) != null) {
+                    System.out.println("got an object from server");
+                    System.out.println(obj.getClass());
+
+                    String nameToShow = (String) obj;
+                    boolean[] checkboxState = (boolean[]) in.readObject();
+                    otherSeqsMap.put(nameToShow, checkboxState);
+                    // otherSeqMap has the checkboxState associated with each person.
+
+                    listVector.add(nameToShow);
+                    incomingList.setListData(listVector);
+                }
+            } catch (IOException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    // This is an inner class This is also new - A ListSelectionListener that tells us 
+    // when a user made a selection on the list of messages. When the user selects a message
+    // we IMMEDIATELY laod the associated beat pattern(it's in the HashMap called otherSeqsMap)
+    // and start playing it. There's some if tests because of little quirky things about 
+    // getting ListSelectionEvents.
+    public class MyListSelectionListener implements ListSelectionListener {
+        public void valueChanged(ListSelectionEvent lse) {
+            if (!lse.getValueIsAdjusting()) {
+                String selected = incomingList.getSelectedValue();
+                if(selected != null) {
+                    // now go to the map and change its sequence
+                    boolean[] selectedState = otherSeqsMap.get(selected);
+                    changeSequence(selectedState);
+                    sequencer.stop();
+                    buildTrackAndStart();
+                }
+            }
+        }
+    }
+ 
+    // This method is callled when the user selects something from the list. We IMMEDIATELY change
+    // the pattern to the one they selected.
+    private void changeSequence(boolean[] checkboxState) {
+        for (int i = 0; i < NUM_INSTRUMENTS*NUM_BEATS; i++) {
+            JCheckBox check = checkboxList.get(i);
+            check.setSelected(checkboxState[i]);
+        }
+    }
+
+
     // This makes events for one instrument at a time, for all 16 beats.
     // So, it might get an int[] for the Bass drum, and each index in the array will 
     // hold either the key of that instrument or a zero. If it's a zero, the instrument
     // isn't supposed to play at that beat. Otherwise, make an event and add it to the track.
-    private void makeTracks(int[] list) {
+    private void makeTracks(ArrayList<Integer> list) {
         for (int i = 0; i < NUM_INSTRUMENTS; i++) {
-            int key = list[i];
+            Integer instrumentKey = list.get(i);
 
-            if (key != 0) {
-                track.add(makeEvent(NOTE_ON, 9, key, 100, i));
-                track.add(makeEvent(NOTE_OFF, 9, key, 100, i+1));
+            if (instrumentKey != null) {
+                track.add(makeEvent(NOTE_ON, 9, instrumentKey, 100, i));
+                track.add(makeEvent(NOTE_OFF, 9, instrumentKey, 100, i+1));
             }
         }        
     }
