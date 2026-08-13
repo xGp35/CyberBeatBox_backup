@@ -1,0 +1,68 @@
+There are 2 jobs you need to distinguish.
+
+                    DATA COMING IN
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │ How do I READ it?   │
+              └─────────────────────┘
+                         │
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+       bytes           text          objects
+
+
+And Java gives you different tools depending on what you're trying to read.
+
+Bytes -> InputStream
+Text -> Reader
+Objects -> ObjectInputStream
+
+That's enough for now.
+----------------------------------------------------------------------------
+Then you have convinience Layers
+
+For Text:
+Reader -> BufferedReader
+
+BufferedReader basically says - "I'll buffer the characters for you and give you convinient methods like readLine()."
+
+For Bytes:
+InputStream -> BufferedInputStream
+
+For objects:
+
+InputStream -> ObjectInputStream
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Then there's the other direction: DATA GOING OUT
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │ How do I WRITE it?  │
+              └─────────────────────┘
+                         │
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+       bytes           text          objects
+
+Bytes -> OutputStream
+Text -> Writer
+Objects -> ObjectOutputStream
+
+
