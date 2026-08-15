@@ -55,7 +55,7 @@ public class MusicServer {
 
         public void run() {
             Object userName;
-            Object bearSequence;
+            Object beatSequence;
             try {
                 while ((userName = in.readObject()) != null) {
                     beatSequence = in.readObject();
